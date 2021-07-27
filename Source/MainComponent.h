@@ -28,11 +28,16 @@ public:
 
     //==============================================================================
     void paint (juce::Graphics& g) override;
+    void paintIfNoFileLoaded(juce::Graphics& g, const juce::Rectangle<int>& thumbnailBounds);
+    void paintIfFileLoaded(juce::Graphics& g, const juce::Rectangle<int>& thumbnailBounds);
     void resized() override;
 
     juce::AudioFormatManager formatManager;
     juce::AudioTransportSource transportSource;
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
+
+    juce::AudioThumbnailCache thumbnailCache;
+    juce::AudioThumbnail thumbnail;
 
 private:
 

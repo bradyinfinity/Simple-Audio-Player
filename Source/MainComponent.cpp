@@ -1,9 +1,11 @@
 #include "MainComponent.h"
 
 MainComponent::MainComponent()
-    : state (TransportState::Stopped)
+    : state (TransportState::Stopped),
+    thumbnailCache(5),
+    thumbnail(512, formatManager, thumbnailCache)
 {
-    setSize (350, 100);
+    setSize (350, 200);
     formatManager.registerBasicFormats();
     transportSource.addChangeListener(this);
 
@@ -32,6 +34,8 @@ MainComponent::MainComponent()
     currentPositionLabel.setText(" ", juce::dontSendNotification);
 
     startTimer(20);
+
+    thumbnail.addChangeListener(this);
 
     // permissions to open input channels
     if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
@@ -77,6 +81,42 @@ void MainComponent::releaseResources()
 void MainComponent::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colours::black);
+
+    juce::Rectangle<int> thumbnailBounds (10, 100, getWidth() - 20, getHeight() - 120);
+
+    if (thumbnail.getNumChannels() == 0)
+        paintIfNoFileLoaded(g, thumbnailBounds);
+    else
+        paintIfFileLoaded(g, thumbnailBounds);
+}
+
+void MainComponent::paintIfNoFileLoaded(juce::Graphics& g, const juce::Rectangle<int>& thumbnailBounds)
+{
+    g.setColour(juce::Colours::darkgrey);
+    g.fillRect(thumbnailBounds);
+    g.setColour(juce::Colours::white);
+    g.drawFittedText("No File To Display", thumbnailBounds, juce::Justification::centred, 1);
+}
+
+void MainComponent::paintIfFileLoaded(juce::Graphics& g, const juce::Rectangle<int>& thumbnailBounds)
+{
+    g.setColour(juce::Colours::darkkhaki);
+    g.fillRect(thumbnailBounds);
+    g.setColour(juce::Colours::black);   
+    auto audioLength = (float)thumbnail.getTotalLength();
+    thumbnail.drawChannels(g,
+        thumbnailBounds,
+        0.0, // start time
+        thumbnail.getTotalLength(), // end time
+        1.0f); // vertical zoom
+
+    g.setColour(juce::Colours::darkgrey);
+
+    auto audioPosition = (float)transportSource.getCurrentPosition();
+    auto drawPosition = (audioPosition / audioLength) * (float)thumbnailBounds.getWidth()
+        + (float)thumbnailBounds.getX();
+    g.drawLine(drawPosition, (float)thumbnailBounds.getY(), drawPosition,
+        (float)thumbnailBounds.getBottom(), 2.0f);
 }
 
 void MainComponent::resized()
@@ -98,6 +138,10 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source)
             changeState(TransportState::Stopped);
         else if (TransportState::Pausing == state)
             changeState(TransportState::Paused);
+    }
+    if (source == &thumbnail)
+    {
+        repaint();
     }
 }
 
@@ -156,6 +200,7 @@ void MainComponent::openButtonClicked()
             std::unique_ptr<juce::AudioFormatReaderSource> newSource(new juce::AudioFormatReaderSource(reader, true));
             transportSource.setSource(newSource.get(), 0, nullptr, reader->sampleRate);
             playButton.setEnabled(true);
+            thumbnail.setSource(new juce::FileInputSource(file));
             readerSource.reset(newSource.release());
         }
     }
@@ -197,6 +242,7 @@ void MainComponent::timerCallback()
     {
         //currentPositionLabel.setText(" ", juce::dontSendNotification);
     }
+    repaint();
 }
 
 void MainComponent::updateLoopState(bool shouldLoop)
